@@ -1,19 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
     <meta charset="utf-8" />
-    <title>My Vector Graphics Editor</title>
+    <title>Joe Dobbelaar's Vector Graphics Editor</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tsparticles/confetti@3.0.3/tsparticles.confetti.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.min.js" integrity="sha384-cuYeSxntonz0PPNlHhBs68uyIAVpIIOZZ5JqeqvYYIcEL727kskC66kF92t6Xl2V" crossorigin="anonymous"></script>
 
     <script id="vshader" type="x-shader/x-vertex">
         attribute vec4 vPosition;
         attribute vec4 vColor;
         uniform float uZoom;
+        uniform float uRotationAngle;
         uniform vec2 uCameraOffset;
         varying vec4 fColor;
 
+
+        
         void main() {
             vec2 offset = uCameraOffset / vec2(400, 400) * 2.0;
-            gl_Position = vec4((vPosition.xy * uZoom) + offset, vPosition.zw);
+            float cosAngle = cos(uRotationAngle);
+            float sinAngle = sin(uRotationAngle);
+            mat2 rotationMatrix = mat2(cosAngle, -sinAngle, sinAngle, cosAngle);
+            gl_Position = vec4((vPosition.xy * uZoom * rotationMatrix) + offset, vPosition.zw);
             fColor = vColor;			// Pass point color to fragment shader
         }
     </script>
@@ -39,23 +48,38 @@
 
 <body onload="main()">
 
-<div style="text-align: center">
-    <h1 id='htitle'>My Vector Graphics Editor</h1>
+<div style="text-align: center" class="d-flex flex-column align-items-center">
+    <h1 id='htitle'>Joe Dobbelaar's Vector Graphics Editor!!!1</h1>
 
-    <canvas id="webgl" width="400" height="400" style="border: 1px solid black;">
+    <canvas id="webgl" width="400" height="400" style="border: 1px solid black;" class="m-4">
         Please use a browser that supports the "canvas" tag.
     </canvas>
 
-    <form id="fileupload" enctype="multipart/form-data">
-        <input type="file" id="files" name="files[]" accept=".svg" />
+    <form id="fileupload" enctype="multipart/form-data" class="d-flex flex-row justify-content-between" style="max-width: 500px;">
+        <input type="file" id="files" className="text-center" name="files[]" accept=".svg" />
+        <div class="form-check">
+            <input type="checkbox" id="viewBoxCheckbox" class="form-check-input" />
+            <label for="viewBoxCheckbox">Render ViewBox</label>
+        </div>
+    </form>
+    <form class="d-flex flex-row justify-content-between" style="max-width: 500px;">
+        <div class="form-check">
+            <input type="checkbox" id="persist-right-click-checkbox" class="form-check-input" checked="true" onchange="handlePersistanceChange()" />
+            <label for="viewBoxCheckbox">Persist Right Click</label>
+        </div>
     </form>
 
-    <div>
-        <input type="checkbox" id="viewBoxCheckbox" onchange="toggleViewBox()" />
-        <label for="viewBoxCheckbox">Render ViewBox</label>
+    <div class="mt-4 d-flex flex-row justify-content-end w-100" style="max-width: 200px;">
+        <div class="input-group mb-3">
+            <input type="text" id="framerate" class="form-control" aria-label="Framerate Input" value="24" onchange="updateFramerate()">
+            <span class="input-group-text">FPS</span>
+          </div>
     </div>
 
-    
+    <div class="mt-4 alert alert-warning alert-dismissible fade" role="alert" id="viewbox-alert">
+        <strong>Note: </strong> The loaded SVG contains lines that are not within the viewbox.
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
 
 </div>
 
