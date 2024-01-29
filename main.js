@@ -21,11 +21,62 @@ function main() {
     document.getElementById('files').addEventListener('change', (e) => loadSVG(e, canvas, gl, program), false);
 
     canvas.addEventListener('wheel', (e) => handleZoom(e, gl));
+
+    canvas.addEventListener('mousedown', (event) => {
+        isDragging = true;
+        dragStart.x = event.clientX;
+        dragStart.y = event.clientY;
+    });
+
+    let dragged = false;
+
+    const movementFrameRate = 24;
+
+    function doMovementTick() {
+        if (dragged) {
+            dragged = false;
+            renderLines(gl, program);
+        }
+        setTimeout(doMovementTick, 1000/movementFrameRate);
+    }
+
+    doMovementTick();
+    
+    canvas.addEventListener('mousemove', (event) => {
+        if (isDragging) {
+            const dx = event.clientX - dragStart.x;
+            const dy = event.clientY - dragStart.y;
+            dragStart.x = event.clientX;
+            dragStart.y = event.clientY;
+    
+            cameraOffset.x += dx;
+            cameraOffset.y += dy;
+
+            dragged = true;
+        }
+    });
+    
+    canvas.addEventListener('mouseup', (event) => {
+        isDragging = false;
+        currentOffset.x += cameraOffset.x;
+        currentOffset.y += cameraOffset.y;
+        cameraOffset.x = 0;
+        cameraOffset.y = 0;
+    });
+    
+    canvas.addEventListener('mouseleave', (event) => {
+        isDragging = false;
+    });    
 }
 
 let zoom = 1;
 
 let linesArray = [];
+
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+let cameraOffset = { x: 0, y: 0 };
+let currentOffset = { x: 0, y: 0 };
 
 function handleZoom(e, gl) {
     e.preventDefault();
@@ -67,60 +118,38 @@ function loadSVG(event, canvas, gl, program) {
     const vbX2 = +viewBox[2];
     const vbY2 = +viewBox[3];
 
-    
     const vbXRange = Math.abs(vbX2 - vbX1);
     const vbYRange = Math.abs(vbY2 - vbY1);
-    
-    function renderViewBox() {
-        if (!showViewBox) { return; }
+    const scale = vbXRange > vbYRange ? vbXRange : vbYRange;
 
-        console.log(vbXRange, vbYRange)
-
-        const scale = vbXRange > vbYRange ? vbXRange : vbYRange;
-
-        linesArray.push({
-            x1: (vbX1 * scale),
-            y1: (vbY1 * scale),
-            x2: (vbX2 * scale),
-            y2: (vbY1 * scale),
-            stroke: "#000000"
-        });
-        linesArray.push({
-            x1: (vbX1 * scale),
-            y1: (vbY2 * scale),
-            x2: (vbX2 * scale),
-            y2: (vbY2 * scale),
-            stroke: "#000000"
-        });
-        linesArray.push({
-            x1: (vbX1 * scale),
-            y1: (vbY1 * scale),
-            x2: (vbX1 * scale),
-            y2: (vbY2 * scale),
-            stroke: "#000000"
-        });
-        linesArray.push({
-            x1: (vbX2 * scale),
-            y1: (vbY1 * scale),
-            x2: (vbX2 * scale),
-            y2: (vbY2 * scale),
-            stroke: "#000000"
-        });
+    function canvasizeX(x) {
+        return (x / scale) - (vbX1 / scale) - (vbXRange / (scale * 2));
+    }
+    function canvasizeY(y) {
+        return (y / scale) - (vbY1 / scale) - (vbYRange / (scale * 2));
     }
 
-    renderViewBox()
+    function renderViewBox() {
+        if (!showViewBox) { return; }
+        linesArray.push({ x1: canvasizeX(vbX1), y1: canvasizeY(vbY1), x2: canvasizeX(vbX2), y2: canvasizeY(vbY1), stroke: "#000000" });
+        linesArray.push({ x1: canvasizeX(vbX1), y1: canvasizeY(vbY2), x2: canvasizeX(vbX2), y2: canvasizeY(vbY2), stroke: "#000000" });
+        linesArray.push({ x1: canvasizeX(vbX1), y1: canvasizeY(vbY1), x2: canvasizeX(vbX1), y2: canvasizeY(vbY2), stroke: "#000000" });
+        linesArray.push({ x1: canvasizeX(vbX2), y1: canvasizeY(vbY1), x2: canvasizeX(vbX2), y2: canvasizeY(vbY2), stroke: "#000000" });
+        // console.log(linesArray)
+    }
 
+    
     // Render each line
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-
-        const x1 = ((+line.getAttribute("x1") / vbXRange));
-        const y1 = ((+line.getAttribute("y1") / vbYRange));
-        const x2 = ((+line.getAttribute("x2") / vbXRange));
-        const y2 = ((+line.getAttribute("y2") / vbYRange));
-
+        
+        const x1 = canvasizeX(+line.getAttribute("x1"));
+        const y1 = canvasizeY(+line.getAttribute("y1"));
+        const x2 = canvasizeX(+line.getAttribute("x2"));
+        const y2 = canvasizeY(+line.getAttribute("y2"));
+        
         // I want to center the whole thing
-
+        
         const stroke = line.getAttribute("stroke")
         const newLine = {
             x1: x1,
@@ -129,9 +158,10 @@ function loadSVG(event, canvas, gl, program) {
             y2: -y2,
             stroke: stroke
         }
-        // linesArray.push(newLine);
+        linesArray.push(newLine);
     }
-
+    
+    renderViewBox() // Add viewbox
     // Render each line
     renderLines(gl, program);
   };
@@ -140,8 +170,13 @@ function loadSVG(event, canvas, gl, program) {
 
 function renderLines(gl, program) {
     gl.clear(gl.COLOR_BUFFER_BIT)
+
     const uZoom = gl.getUniformLocation(program, 'uZoom');
     gl.uniform1f(uZoom, zoom)
+
+    const uCameraOffset = gl.getUniformLocation(program, 'uCameraOffset');
+    gl.uniform2f(uCameraOffset, cameraOffset.x + currentOffset.x, -(cameraOffset.y + currentOffset.y));
+
     for (let i = 0; i < linesArray.length; i++) {
         const line = linesArray[i];
         renderLine(gl, program, line);
